@@ -7,6 +7,7 @@ from urllib.parse import quote
 
 import pytest
 
+from pv_vision.media import InfoVideo
 from pv_vision.recorder import Recorder
 from tests.conftest import CAMERA_HOST, CAMERA_PASSWORD, CAMERA_USER, FakeAudit, FakeMono, FakePopen
 
@@ -15,6 +16,8 @@ ENC = quote(CAMERA_PASSWORD, safe="")
 
 @pytest.fixture
 def env(tmp_path):
+    """Recorder con ffmpeg falso. ``probe`` da por válido todo archivo de >= 100 bytes (ffprobe real
+    en los tests de integración); los más chicos son "sin video" (como el MP4 de 28 bytes)."""
     mono = FakeMono()
     audit = FakeAudit()
     popen = FakePopen()
@@ -31,8 +34,17 @@ def env(tmp_path):
         audit=audit,
         popen=popen,
         monotonic=mono,
+        probe=fake_probe,
     )
     return rec, mono, audit, popen, out, tmp_path / "tmp"
+
+
+def fake_probe(path: Path) -> InfoVideo | None:
+    size = path.stat().st_size
+    if size < 100:
+        return None
+    # 100 bytes ⇒ 0,5 s: permite probar el descarte por duración.
+    return InfoVideo(0.5 if size == 100 else 300.0, 1920, 1080, "hevc")
 
 
 def _grow(out: Path, name: str, size: int) -> None:
@@ -208,3 +220,50 @@ def test_motivo_de_parada_se_loguea(env, caplog):
     rec.tick(True)
     rec.tick(False, "espacio libre bajo el mínimo de 10 GB")
     assert "Grabación detenida (espacio libre bajo el mínimo de 10 GB)" in caplog.text
+
+
+def test_segmento_de_28_bytes_al_cerrar_se_descarta(env):
+    """Hallazgo del PR A: si la parada cae justo en un corte, ffmpeg deja un MP4 de 28 bytes sin moov."""
+    rec, mono, audit, popen, out, _tmp = env
+    rec.tick(True)
+    _grow(out, "2026-10-05_06-45-00_main.mp4", 1000)
+    mono.advance(1)
+    rec.tick(True)
+    _grow(out, "2026-10-05_06-50-00_main.mp4", 28)
+    rec.tick(False)
+    assert audit.kinds() == ["segment_created", "segment_discarded"]
+    desc = audit.records[-1]
+    assert desc["file"] == "2026-10-05_06-50-00_main.mp4" and desc["bytes"] == 28
+    assert desc["motivo"] == "sin video válido"
+    assert not (out / "2026-10-05_06-50-00_main.mp4").exists()
+    assert (out / "2026-10-05_06-45-00_main.mp4").exists()
+    assert rec.counters.segments == 1 and rec.counters.discarded == 1
+
+
+def test_segmento_de_menos_de_1_s_se_descarta(env):
+    rec, _mono, audit, _popen, out, _tmp = env
+    rec.tick(True)
+    _grow(out, "2026-10-05_06-50-00_main.mp4", 100)  # fake_probe ⇒ 0,5 s
+    rec.tick(False)
+    assert audit.records[-1]["kind"] == "segment_discarded"
+    assert "0.50 s" in audit.records[-1]["motivo"]
+
+
+def test_descarte_no_toca_segmentos_previos_ni_ajenos(env):
+    rec, _mono, audit, _popen, out, _tmp = env
+    _grow(out, "2026-10-05_06-00-00_main.mp4", 28)  # de otra sesión: no se toca aunque sea inválido
+    _grow(out, "basura.mp4", 5)
+    (out / "conjunto_b").mkdir()
+    rec.tick(True)
+    rec.tick(False)
+    assert audit.records == []
+    assert (out / "2026-10-05_06-00-00_main.mp4").exists() and (out / "basura.mp4").exists()
+
+
+def test_descarte_tambien_tras_una_caida(env):
+    rec, _mono, audit, popen, out, _tmp = env
+    rec.tick(True)
+    _grow(out, "2026-10-05_06-20-00_main.mp4", 28)
+    popen.last.exit(0)
+    rec.tick(True)
+    assert audit.kinds() == ["segment_discarded", "reconnect"]
