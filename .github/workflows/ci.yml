@@ -3,8 +3,8 @@ name: CI
 on:
   push:
     branches: [main]
+  # Sin filtro de rama: también corre en PRs apilados (base = otra rama de trabajo).
   pull_request:
-    branches: [main]
 
 permissions:
   contents: read
