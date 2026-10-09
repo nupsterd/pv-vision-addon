@@ -87,20 +87,21 @@ Cada hora: `Retención: N segmento(s) … borrados`.
 ## Desarrollo / tests
 
 ```bash
-uv venv -p 3.12 .venv && uv pip install -p .venv -r requirements-dev.txt
+uv venv -p 3.13 .venv && uv pip install -p .venv -r requirements-dev.txt
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 .venv/bin/python -m pytest -q          # los de integración se saltean sin ffmpeg/mediamtx
 ```
 
-**Dentro de la imagen real** (amd64-base:3.21, como en la Pi pero amd64), incluidos los de
+**Dentro de la imagen real** (`amd64-base-debian:trixie`, como en la Pi pero amd64; con el python del venv
+`/opt/venv`, el mismo del `CMD`), incluidos los de
 integración contra un servidor RTSP real (mediamtx v1.9.3, binario no versionado):
 
 ```bash
-docker build --build-arg BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.21 -t pv-vision:test-base .
+docker build --build-arg BUILD_FROM=ghcr.io/home-assistant/amd64-base-debian:trixie -t pv-vision:test-base .
 printf 'FROM pv-vision:test-base\nRUN apk add --no-cache py3-pytest py3-yaml\nCOPY tests/ /app/tests/\nCOPY config.yaml pyproject.toml /app/\n' \
   | docker build -t pv-vision:test -f - .
 docker run --rm --entrypoint sh -v "$MTX_DIR":/mtx:ro -e PV_VISION_MEDIAMTX=/mtx/mediamtx -w /app pv-vision:test \
-  -c 'python3 -m pytest -q -p no:cacheprovider'
+  -c '/opt/venv/bin/python3 -m pytest -q -p no:cacheprovider'
 ```
 
 Módulos (`pv_vision/`): `config`, `schedule`, `segments`, `ffmpeg`, `recorder`, `clock`,
