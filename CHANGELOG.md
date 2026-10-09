@@ -5,10 +5,10 @@ versionado siguiendo [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
-## [0.1.0-alpha]
+## [0.1.0-alpha] - 2026-10-08
 
-Primera versión (B7.1, fase a: solo grabador). Se publica y se crea el tag después del
-smoke en hardware (Pi de la oficina).
+Primera versión (B7.1, fase a: solo grabador). Verificada en hardware real (Pi de la oficina)
+antes del tag.
 
 ### Added
 - Grabación por ventanas horarias (`ventanas`, `dias`) del stream RTSP de una cámara
