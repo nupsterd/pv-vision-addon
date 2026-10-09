@@ -170,11 +170,14 @@ def test_graba_hevc_hvc1_en_segmentos_con_hora_local_y_sin_secretos(server, tmp_
     rec.tick(False)
     segs = list_segments(tmp_path / "media", BOGOTA, "main")
     assert len(segs) >= 2
-    for seg in segs:
+    for i, seg in enumerate(segs):
         info = _ffprobe(seg.path)
         assert info["streams"][0]["codec_name"] == "hevc"
         assert info["streams"][0]["codec_tag_string"] == "hvc1"
-        assert float(info["format"]["duration"]) > 1
+        # El último lo corta el SIGINT de fin de ventana: puede durar una fracción de segundo si la
+        # parada cae justo después de un corte alineado al reloj (más frecuente con ffmpeg 7.1, que
+        # tarda ~0,4 s más en abrir el stream).
+        assert float(info["format"]["duration"]) > (0 if i == len(segs) - 1 else 1)
     # Nombre en hora local de Bogotá (no UTC).
     assert abs((segs[0].start - inicio).total_seconds()) < 6
     assert list((tmp_path / "tmp").glob("*.ffconcat")) == []
