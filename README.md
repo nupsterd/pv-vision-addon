@@ -1,14 +1,19 @@
 # Visión (Portería Virtual) — Home Assistant Add-on
 
-Add-on de Home Assistant OS para la Pi de un sitio. **Fase (a) del Bloque 7: solo
-graba.** Dentro de ventanas horarias de los días configurados, copia el stream RTSP
-de una cámara Dahua (probado con el formato de `DH-IPC-HFW5242HN-ZHE-MF`) **sin
-recodificar**, en segmentos MP4 fragmentados en `/media/pv_vision/`, visibles en
-*Medios → Medios locales* de HA.
+Add-on de Home Assistant OS para la Pi de un sitio (Bloque 7). Dos partes:
+
+1. **Grabador por ventanas:** dentro de ventanas horarias de los días configurados, copia el
+   stream RTSP de una cámara Dahua (probado con `DH-IPC-HFW5242HN-ZHE-MF`) **sin
+   recodificar**, en segmentos MP4 fragmentados en `/media/pv_vision/`, visibles en
+   *Medios → Medios locales* de HA.
+2. **Modo de análisis de archivos** (apagado por defecto): sobre clips ya grabados, detecta
+   personas (YOLOX o RF-DETR en ONNX Runtime, CPU), las sigue (ByteTrack mínimo) y cuenta
+   los cruces de una línea propia. Escribe cruces y métricas en JSON Lines; `tools/evaluar.py`
+   los compara con la verdad etiquetada.
 
 **Modo sombra:** no habla con `pv-backend`, no genera alertas y **el video no sale
-de la Pi** (ver [DOCS.md](DOCS.md), Ley 1581). El detector de personas vendrá en una
-fase posterior, en este mismo add-on.
+de la Pi** (ver [DOCS.md](DOCS.md), Ley 1581). Del análisis solo salen los `cruces.jsonl`
+(horas, sentidos, ids de pista; sin imágenes).
 
 ```
  ┌──────────────┐  RTSP/TCP H.265   ┌────────────────────────────────┐
@@ -64,13 +69,50 @@ secretos; retención 30 días.
 | `segment_created` | `file`, `bytes`, `stream` (al cerrarse el segmento) |
 | `segment_deleted` | `file`, `bytes`, `stream` (retención) |
 | `reconnect` | `motivo` (enmascarado), `retry_seconds`, `stream` |
+| `segment_discarded` | `file`, `bytes`, `motivo`, `stream` (segmento propio sin video o < 1 s, borrado al cerrar) |
 | `disk_low` | `free_bytes`, `min_free_gb` (al pasar bajo el umbral) |
+| `derived_deleted` | `file`, `bytes` (retención de `depuracion/` y `referencia/`, 7 días) |
+
+## Modo de análisis de archivos
+
+Proceso aparte del grabador (`python3 -m pv_vision.analisis`, `nice 10`, ORT con
+`analisis_hilos` hilos y sin espera activa). Si muere, el grabador lo relanza a los 60 s /
+5 min / 15 min; **nunca frena al grabador**. Con `analisis_solo_fuera_de_ventanas` (default)
+no empieza clips dentro de una ventana: termina el que está y espera.
+
+```
+clip.mp4 ─ ffmpeg -threads 2: crop ROI · select 1/N · showinfo (pts) · scale+pad ─▶ rawvideo
+        ─▶ ONNX Runtime (YOLOX: grilla+NMS · RF-DETR: sigmoide) solo "persona"
+        ─▶ ByteTrack mínimo (2 etapas, IoU) ─▶ línea con histéresis ─▶ cruces.jsonl
+```
+
+- **Modelos** (`/opt/modelos`, sha256 verificado en el build): `yolox_nano` (416),
+  `yolox_tiny` (416), `yolox_s` (640), `rfdetr_nano` (384), `rfdetr_nano_int8` (384),
+  `rfdetr_small` (512). YOLOX: letterbox gris 114, BGR 0-255. RF-DETR: estirado a S×S, RGB
+  normalizado ImageNet (como su propio `predict`). Licencias en [NOTICE](NOTICE).
+- **Clips:** primer nivel de `analisis_dir`, nombres `nNN_AAAA-MM-DD_hh.mm.ss-hh.mm.ss.mp4`
+  (conjunto B) o `AAAA-MM-DD_HH-MM-SS_main|sub.mp4` (conjunto C). Hora absoluta = hora del
+  nombre + `pts`. Se saltean inválidos o de menos de 1 s y archivos modificados hace < 60 s.
+  Otra resolución (p. ej. secundario 704×576): ROI y línea se escalan.
+- **Conteo:** punto de referencia (`pie` o `centro` de la caja) contra la línea dirigida;
+  banda `±histeresis_px` que conserva el lado estable; un cruce cuenta de lado estable a
+  lado estable tras `cuadros_confirmacion` cuadros. Quien se detiene sobre la línea no
+  cuenta; quien vuelve atrás suma una salida y una entrada.
+- **Salidas** en `/config/analisis/<run_id>/` (`/app_configs/<slug>/analisis/…`):
+  `cruces.jsonl` (`kind=cruce` por cruce; `kind=clip` por clip con `fps_proc`,
+  `cuadros_por_s_video`, `x_tiempo_real`, `ms_decod`, `ms_detector`, `ms_tracker`,
+  `cpu_proceso_pct` (% de un núcleo, análisis + ffmpeg), `cpu_total_pct`, `rss_mb`,
+  `temp_max_c`, `freq_min_mhz`) y `resumen.json`. Idempotente: `/config/analisis/hechos.json`
+  (`nombre|bytes|modelo|hash de parámetros`).
+- **Cuadro de referencia** (`referencia_desde`) y **video de depuración**
+  (`depuracion_clips`): en `/media/pv_vision/referencia/` y `/media/pv_vision/depuracion/`,
+  borrados a los 7 días.
 
 ## Logs
 
 Al arrancar: cada opción, con `camera_user`/`camera_password` como "configurado"/"vacío"
 y la fuente como `rtsp://***@host:554/…`. Cada 15 min:
-`Resumen 15 min: segmentos=… bytes=… reconexiones=… libre=… grabando=… próxima_ventana=…`.
+`Resumen 15 min: segmentos=… bytes=… reconexiones=… libre=… grabando=… próxima_ventana=… descartados=…`.
 Cada hora: `Retención: N segmento(s) … borrados`.
 
 ## Límites conocidos
@@ -98,11 +140,19 @@ integración contra un servidor RTSP real (mediamtx v1.9.3, binario no versionad
 
 ```bash
 docker build --build-arg BUILD_FROM=ghcr.io/home-assistant/amd64-base-debian:trixie -t pv-vision:test-base .
-printf 'FROM pv-vision:test-base\nRUN /opt/venv/bin/pip install --no-cache-dir pytest==8.4.2 pyyaml==6.0.3\nCOPY tests/ /app/tests/\nCOPY config.yaml pyproject.toml /app/\n' \
+printf 'FROM pv-vision:test-base\nRUN /opt/venv/bin/pip install --no-cache-dir pytest==8.4.2 pyyaml==6.0.3\nCOPY tests/ /app/tests/\nCOPY tools/ /app/tools/\nCOPY config.yaml pyproject.toml /app/\n' \
   | docker build -t pv-vision:test -f - .
-docker run --rm --entrypoint sh -v "$MTX_DIR":/mtx:ro -e PV_VISION_MEDIAMTX=/mtx/mediamtx -w /app pv-vision:test \
-  -c '/opt/venv/bin/python3 -m pytest -q -p no:cacheprovider'
+# vtest.avi: video público de opencv/opencv (samples/data, Apache-2.0), bajado en la corrida, no versionado.
+curl -sSL -o "$VID_DIR/vtest.avi" https://raw.githubusercontent.com/opencv/opencv/4.x/samples/data/vtest.avi
+docker run --rm --entrypoint sh -v "$MTX_DIR":/mtx:ro -v "$VID_DIR":/video:ro -e PV_VISION_MEDIAMTX=/mtx/mediamtx \
+  -e PV_VISION_VIDEO_PUBLICO=/video/vtest.avi -w /app pv-vision:test -c '/opt/venv/bin/python3 -m pytest -q -p no:cacheprovider'
 ```
 
-Módulos (`pv_vision/`): `config`, `schedule`, `segments`, `ffmpeg`, `recorder`, `clock`,
-`audit`, `main`.
+Mientras la release `modelos-v1` no exista, el build local puede servir los assets con
+`python3 -m http.server` y `--network host --build-arg MODELOS_URL=http://127.0.0.1:<puerto>`
+(el sha256 se verifica igual).
+
+Módulos (`pv_vision/`): `config`, `schedule`, `segments`, `ffmpeg`, `recorder`, `media`,
+`clock`, `audit`, `main`; análisis en `pv_vision/analisis/`: `modelos`, `geometria`,
+`decodificar`, `detectores`, `tracker`, `conteo`, `clips`, `metricas`, `corrida`,
+`referencia`, `depuracion`, `dibujo`, `proceso`, `__main__`. Evaluación: `tools/evaluar.py`.
