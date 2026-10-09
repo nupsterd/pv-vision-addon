@@ -6,4 +6,4 @@ Retención por la fecha del nombre (tope 30 días), auditoría local sin video y
 modo sombra: no habla con ``pv-backend`` ni saca el video de la Pi.
 """
 
-ADDON_VERSION = "0.1.1-alpha"
+ADDON_VERSION = "0.2.0-alpha"

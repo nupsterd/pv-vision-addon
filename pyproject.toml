@@ -1,6 +1,6 @@
 [project]
 name = "pv-vision-addon"
-version = "0.1.1a0"
+version = "0.2.0a0"
 description = "Window recorder (RTSP, no re-encoding) add-on for Home Assistant (Porteria Virtual)"
 requires-python = ">=3.12"
 dependencies = []

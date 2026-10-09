@@ -37,7 +37,7 @@ def test_defaults_del_yaml_iguales_a_los_de_config():
 
 
 def test_version_coincide_en_yaml_y_paquete():
-    assert _yaml()["version"] == ADDON_VERSION == "0.1.1-alpha"
+    assert _yaml()["version"] == ADDON_VERSION == "0.2.0-alpha"
 
 
 def test_yaml_slug_arch_mapas_y_api():
@@ -151,4 +151,67 @@ def test_load_config_ilegible_no_vuelca_valores(tmp_path, caplog):
     p.write_text('{"camera_password": "' + CAMERA_PASSWORD + '", "segment_seconds": "x"}', encoding="utf-8")
     with pytest.raises(SystemExit):
         load_config(str(p))
+    assert CAMERA_PASSWORD not in caplog.text
+
+
+# ----------------------------------------------------------------------------- análisis
+
+
+def test_defaults_del_analisis():
+    c = Config()
+    assert c.analisis_activo is False and c.analisis_dir == "/media/pv_vision/conjunto_b"
+    assert c.analisis_modelos == ("yolox_nano",) and c.analisis_cada_n == 3 and c.analisis_hilos == 3
+    assert c.roi == "960:720:500:360" and c.linea == "500,467,1113,1080" and c.punto_referencia == "pie"
+    assert (c.histeresis_px, c.cuadros_confirmacion, c.conf_alta, c.conf_baja) == (12, 2, 0.5, 0.1)
+    assert (c.track_buffer_s, c.min_hits, c.referencia_desde, c.depuracion_clips) == (1.5, 3, "", ())
+    assert make_config().validate_analisis() == []
+
+
+@pytest.mark.parametrize(
+    ("campo", "valor", "fragmento"),
+    [
+        ("analisis_dir", "/config", "fuera de /media/pv_vision"),
+        ("analisis_dir", "../../etc", "fuera de /media/pv_vision"),
+        ("analisis_modelos", [], "vacía"),
+        ("analisis_modelos", ["yolov8n"], "desconocido"),
+        ("analisis_modelos", ["yolox_nano", "yolox_nano"], "repetidos"),
+        ("analisis_cada_n", 0, "analisis_cada_n"),
+        ("analisis_hilos", 4, "analisis_hilos"),
+        ("roi", "960:720:1000:400", "se sale"),
+        ("linea", "0,0,10,0", "no atraviesa"),
+        ("linea", "1,2,3", "formato"),
+        ("sentido_salida", "arriba", "sentido_salida"),
+        ("punto_referencia", "cabeza", "punto_referencia"),
+        ("histeresis_px", 500, "histeresis_px"),
+        ("cuadros_confirmacion", 0, "cuadros_confirmacion"),
+        ("conf_baja", 0.7, "umbrales"),
+        ("track_buffer_s", 0.0, "track_buffer_s"),
+        ("min_hits", 0, "min_hits"),
+        ("referencia_desde", "/etc/passwd", "fuera de /media/pv_vision"),
+        ("depuracion_clips", ["../x.mp4"], "nombre de archivo"),
+        ("depuracion_clips", ["clip.avi"], "nombre de archivo"),
+    ],
+)
+def test_opciones_de_analisis_invalidas(campo, valor, fragmento):
+    cfg = make_config(**{campo: valor})
+    errores = cfg.validate_analisis()
+    assert any(fragmento in e for e in errores), errores
+    assert cfg.validate() == []  # un error del análisis nunca frena al grabador
+    assert CAMERA_PASSWORD not in " ".join(errores)
+
+
+def test_bool_estricto():
+    with pytest.raises(ValueError):
+        Config.from_dict({"analisis_activo": "true"})
+
+
+def test_rutas_relativas_aceptadas():
+    assert make_config(analisis_dir="conjunto_b", referencia_desde="conjunto_b/n25.mp4").validate_analisis() == []
+    assert make_config(analisis_dir="/media/pv_vision").validate_analisis() == []
+
+
+def test_startup_con_analisis_invalido_no_sale(caplog):
+    caplog.set_level(logging.INFO)
+    startup(make_config(analisis_activo=True, analisis_hilos=9))
+    assert "Análisis desactivado, configuración inválida: analisis_hilos" in caplog.text
     assert CAMERA_PASSWORD not in caplog.text
