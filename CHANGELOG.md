@@ -5,7 +5,7 @@ versionado siguiendo [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
-## [0.1.1-alpha]
+## [0.1.1-alpha] - 2026-10-09
 
 Cambio de imagen base (B7.1, PR A). Sin cambios de comportamiento del grabador.
 
