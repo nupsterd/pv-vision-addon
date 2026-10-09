@@ -1,0 +1,37 @@
+Visión (Portería Virtual) — pv-vision-addon
+Copyright 2026 nupsterd
+
+Este add-on incluye, en la imagen que construye, modelos de terceros publicados bajo la
+Licencia Apache, Versión 2.0 (https://www.apache.org/licenses/LICENSE-2.0). Se usan solo
+para detectar la clase "persona", sin modificar sus pesos (salvo lo indicado abajo).
+
+------------------------------------------------------------------------------------------
+YOLOX (YOLOX-Nano, YOLOX-Tiny, YOLOX-S)
+Copyright (c) 2021-2022 Megvii Inc. All rights reserved.
+Licencia: Apache License 2.0
+Fuente: https://github.com/Megvii-BaseDetection/YOLOX
+Archivos: yolox_nano.onnx, yolox_tiny.onnx, yolox_s.onnx de la release 0.1.1rc0
+(https://github.com/Megvii-BaseDetection/YOLOX/releases/tag/0.1.1rc0), sin cambios.
+Referencia: Ge, Z., Liu, S., Wang, F., Li, Z., Sun, J. "YOLOX: Exceeding YOLO Series in 2021",
+arXiv:2107.08430.
+
+------------------------------------------------------------------------------------------
+RF-DETR (RF-DETR-Nano, RF-DETR-Small)
+Copyright (c) 2025 Roboflow, Inc.
+Licencia: Apache License 2.0 (código y pesos de las tallas Nano y Small, según
+https://github.com/roboflow/rf-detr; las tallas bajo PML 1.0 NO se usan).
+Fuente: https://github.com/roboflow/rf-detr — paquete rfdetr 1.11.2.
+Pesos COCO originales:
+  https://storage.googleapis.com/rfdetr/nano_coco/checkpoint_best_regular.pth
+  https://storage.googleapis.com/rfdetr/small_coco/checkpoint_best_regular.pth
+Cambios: exportados a ONNX con `RFDETRNano().export()` / `RFDETRSmall().export()`
+(rfdetr 1.11.2, torch 2.14.1 CPU, onnx 1.23.2). `rfdetr_nano_int8.onnx` es además una
+cuantización dinámica int8 de los pesos (onnxruntime 1.30.0, `quantize_dynamic`, QInt8).
+Se distribuyen como assets de la release `modelos-v1` de este repositorio, con SHA256SUMS.
+
+------------------------------------------------------------------------------------------
+ByteTrack (algoritmo)
+El seguimiento de `pv_vision/analisis/tracker.py` es una implementación propia basada en el
+algoritmo de ByteTrack (Zhang, Y. et al. "ByteTrack: Multi-Object Tracking by Associating
+Every Detection Box", ECCV 2022; https://github.com/ifzhang/ByteTrack, licencia MIT).
+No incluye código de ese repositorio.

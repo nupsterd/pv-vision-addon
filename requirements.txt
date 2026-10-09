@@ -1,0 +1,4 @@
+# Dependencias de Python del add-on (venv /opt/venv de la imagen). Versiones fijadas;
+# hay wheels oficiales cp313 manylinux_2_28 para aarch64 (Debian trixie, glibc 2.41).
+numpy==2.5.3
+onnxruntime==1.30.0
