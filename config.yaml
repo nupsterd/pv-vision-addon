@@ -1,5 +1,5 @@
 name: "Visión (Portería Virtual)"
-version: "0.1.0-alpha"
+version: "0.1.1-alpha"
 slug: pv_vision
 description: >
   Graba el stream RTSP de una cámara (Dahua) en ventanas horarias de días

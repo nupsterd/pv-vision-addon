@@ -9,15 +9,21 @@ LABEL description="Grabador por ventanas de una cámara RTSP para Home Assistant
 # no pasa el ENV del container al CMD).
 ENV TZ=America/Bogota
 
-# ffmpeg 6.1 de Alpine 3.21: demuxer RTSP y muxer segment/mp4; se copia sin recodificar.
-RUN apk add --no-cache \
-    python3 \
-    ffmpeg \
-    tzdata && \
+# Base Debian trixie de HA (glibc): permite las wheels oficiales de onnxruntime para el
+# detector. ffmpeg 7.1 de Debian: demuxer RTSP y muxer segment/mp4; se copia sin recodificar.
+# El venv de /opt/venv queda para las dependencias de Python del detector.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        python3 \
+        python3-venv \
+        ffmpeg \
+        tzdata && \
+    rm -rf /var/lib/apt/lists/* && \
     cp /usr/share/zoneinfo/$TZ /etc/localtime && \
-    echo $TZ > /etc/timezone
+    echo $TZ > /etc/timezone && \
+    python3 -m venv /opt/venv
 
 WORKDIR /app
 COPY pv_vision/ /app/pv_vision/
 
-CMD ["python3", "-m", "pv_vision.main"]
+CMD ["/opt/venv/bin/python3", "-m", "pv_vision.main"]

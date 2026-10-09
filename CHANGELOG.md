@@ -5,6 +5,18 @@ versionado siguiendo [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.1.1-alpha] - 2026-10-09
+
+Cambio de imagen base (B7.1, PR A). Sin cambios de comportamiento del grabador.
+
+### Changed
+- Imagen base `aarch64-base:3.21` (Alpine) → `aarch64-base-debian:trixie` (Debian 13, glibc),
+  necesaria para las wheels oficiales de ONNX Runtime del detector (fase siguiente).
+  ffmpeg 6.1 → 7.1 y Python 3.12 → 3.13. Paquetes por `apt-get` sin *recommends*.
+- El add-on corre con el Python de un venv en `/opt/venv` (vacío por ahora; ahí irán las
+  dependencias del detector).
+- CI con Python 3.13.
+
 ## [0.1.0-alpha] - 2026-10-08
 
 Primera versión (B7.1, fase a: solo grabador). Verificada en hardware real (Pi de la oficina)
