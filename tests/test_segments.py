@@ -116,3 +116,41 @@ def test_umbral_de_espacio():
     assert has_enough_space(10 * GB, 10)
     assert not has_enough_space(10 * GB - 1, 10)
     assert has_enough_space(50 * GB, 10)
+
+
+def test_retencion_de_derivados_7_dias_sin_tocar_conjunto_b(tmp_path):
+    from pv_vision.segments import purge_derivados
+
+    ahora = 2_000_000_000.0
+    viejo, nuevo = ahora - 8 * 86400, ahora - 6 * 86400
+    dbg_viejo = _touch(tmp_path / "depuracion" / "20261001-090000" / "n01_dbg.mp4", 50, viejo)
+    dbg_nuevo = _touch(tmp_path / "depuracion" / "20261007-090000" / "n02_dbg.mp4", 50, nuevo)
+    ref_viejo = _touch(tmp_path / "referencia" / "ref_n25_abc.png", 30, viejo)
+    clip_b = _touch(tmp_path / "conjunto_b" / "n25_2026-10-07_18.37.04-18.37.45.mp4", 10, viejo)
+    seg = _touch(tmp_path / "2026-10-01_06-20-00_main.mp4", 10, viejo)
+    borrados = purge_derivados(tmp_path, ahora)
+    assert sorted(p.name for p, _ in borrados) == ["n01_dbg.mp4", "ref_n25_abc.png"]
+    assert not dbg_viejo.exists() and not ref_viejo.exists()
+    assert not (tmp_path / "depuracion" / "20261001-090000").exists()  # carpeta de corrida vacía
+    assert dbg_nuevo.exists() and clip_b.exists() and seg.exists()
+    assert (tmp_path / "depuracion").is_dir() and (tmp_path / "referencia").is_dir()
+
+
+def test_retencion_de_derivados_nunca_pasa_de_30_dias(tmp_path):
+    from pv_vision.segments import purge_derivados
+
+    ahora = 2_000_000_000.0
+    f = _touch(tmp_path / "referencia" / "ref.png", 1, ahora - 31 * 86400)
+    purge_derivados(tmp_path, ahora, dias=90)
+    assert not f.exists()
+
+
+def test_retencion_de_derivados_no_sigue_symlink(tmp_path):
+    from pv_vision.segments import purge_derivados
+
+    afuera = tmp_path / "afuera"
+    f = _touch(afuera / "importante.png", 1, 1.0)
+    (tmp_path / "m").mkdir()
+    (tmp_path / "m" / "referencia").symlink_to(afuera)
+    purge_derivados(tmp_path / "m", 2_000_000_000.0)
+    assert f.exists()

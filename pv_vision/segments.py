@@ -105,6 +105,45 @@ def purge_expired(directory: str | Path, now: datetime, retention_days: int) -> 
     return borrados
 
 
+DERIVADOS = ("depuracion", "referencia")
+DERIVADOS_RETENCION_DIAS = 7  # Q5; nunca más de 30 (Ley 1581)
+
+
+def purge_derivados(
+    media_dir: str | Path, ahora_ts: float, dias: int = DERIVADOS_RETENCION_DIAS
+) -> list[tuple[Path, int]]:
+    """Borra lo que tenga más de ``dias`` (por mtime) dentro de ``depuracion/`` y ``referencia/``.
+
+    Son carpetas que solo escribe el análisis. No sigue symlinks, no toca ``conjunto_b/`` ni el
+    primer nivel de grabaciones, y quita las subcarpetas de corrida que queden vacías."""
+    limite = ahora_ts - min(dias, 30) * 86400
+    borrados: list[tuple[Path, int]] = []
+    for nombre in DERIVADOS:
+        raiz = Path(media_dir) / nombre
+        if raiz.is_symlink() or not raiz.is_dir():
+            continue
+        for dirpath, _dirnames, filenames in os.walk(raiz, topdown=False, followlinks=False):
+            d = Path(dirpath)
+            for f in filenames:
+                p = d / f
+                try:
+                    st = p.lstat()
+                except OSError:
+                    continue
+                if st.st_mtime < limite:
+                    try:
+                        p.unlink()
+                        borrados.append((p, st.st_size))
+                    except OSError as exc:
+                        log.error("No se pudo borrar %s: %s", p, exc)
+            if d != raiz:
+                try:
+                    d.rmdir()  # solo si quedó vacía
+                except OSError:
+                    pass
+    return borrados
+
+
 def free_bytes(path: str | Path) -> int:
     """Bytes libres del filesystem de ``path`` (sube a la carpeta existente más cercana)."""
     p = Path(path)

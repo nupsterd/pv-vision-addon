@@ -16,12 +16,21 @@ from datetime import datetime
 from pathlib import Path
 
 from pv_vision import ADDON_VERSION
+from pv_vision.analisis.proceso import ProcesoAnalisis
 from pv_vision.audit import AUDIT_DIR, AuditWriter
 from pv_vision.clock import SyncCheck, supervisor_sync_check, supervisor_token
 from pv_vision.config import OPTIONS_PATH, Config
 from pv_vision.recorder import Recorder
 from pv_vision.schedule import active_window, next_window_start
-from pv_vision.segments import RECORDINGS_DIR, fmt_gb, free_bytes, has_enough_space, purge_expired
+from pv_vision.segments import (
+    DERIVADOS_RETENCION_DIAS,
+    RECORDINGS_DIR,
+    fmt_gb,
+    free_bytes,
+    has_enough_space,
+    purge_derivados,
+    purge_expired,
+)
 
 log = logging.getLogger("pv_vision")
 
@@ -65,6 +74,13 @@ def startup(cfg: Config) -> None:
     log.info("Visión (Portería Virtual) %s — grabador por ventanas, modo sombra", ADDON_VERSION)
     for key, value in cfg.describe().items():
         log.info("  %s = %s", key, value)
+    if cfg.analisis_activo:
+        for err in cfg.validate_analisis():
+            log.error("Análisis desactivado, configuración inválida: %s (el grabador sigue).", err)
+
+
+def analisis_habilitado(cfg: Config) -> bool:
+    return cfg.analisis_activo and not cfg.validate_analisis()
 
 
 class Controller:
@@ -79,6 +95,7 @@ class Controller:
         now: Callable[[], datetime] | None = None,
         monotonic: Callable[[], float] = time.monotonic,
         free: Callable[[str | Path], int] = free_bytes,
+        analisis: ProcesoAnalisis | None = None,
     ) -> None:
         self.cfg = cfg
         self.recorder = recorder
@@ -90,6 +107,7 @@ class Controller:
         self._now = now or (lambda: datetime.now(self._tz))
         self._mono = monotonic
         self._free = free
+        self.analisis = analisis
         start = self._mono()
         self._next_retention = start
         self._next_summary = start + SUMMARY_INTERVAL
@@ -114,6 +132,11 @@ class Controller:
         if want and not self._space_ok(mono, now):
             want, reason = False, f"espacio libre bajo el mínimo de {self.cfg.min_free_gb} GB"
         self.recorder.tick(want, reason)
+        if self.analisis is not None:
+            try:
+                self.analisis.tick()
+            except Exception:  # noqa: BLE001 — el análisis nunca frena al grabador
+                log.exception("Error al supervisar el proceso de análisis.")
         if mono >= self._next_summary:
             self.summary(now)
             self._next_summary = mono + SUMMARY_INTERVAL
@@ -168,6 +191,15 @@ class Controller:
             self.cfg.retencion_dias,
             fmt_gb(total),
         )
+        derivados = purge_derivados(self._dir, now.timestamp())
+        for path, size in derivados:
+            self.audit.record("derived_deleted", file=str(path.relative_to(self._dir)), bytes=size)
+        if derivados:
+            log.info(
+                "Retención: %d archivo(s) de depuración/referencia de más de %d días borrados.",
+                len(derivados),
+                DERIVADOS_RETENCION_DIAS,
+            )
         return len(borrados)
 
     def summary(self, now: datetime) -> None:
@@ -178,13 +210,15 @@ class Controller:
             libre = "?"
         nxt = next_window_start(now, self._windows, self.cfg.dias)
         log.info(
-            "Resumen 15 min: segmentos=%d bytes=%d reconexiones=%d libre=%s grabando=%s próxima_ventana=%s",
+            "Resumen 15 min: segmentos=%d bytes=%d reconexiones=%d libre=%s grabando=%s próxima_ventana=%s "
+            "descartados=%d",
             c.segments,
             c.bytes,
             c.reconnects,
             libre,
             "sí" if self.recorder.recording else "no",
             nxt.isoformat(timespec="minutes") if nxt else "-",
+            c.discarded,
         )
 
 
@@ -205,7 +239,10 @@ def build(cfg: Config) -> Controller:
         audit=audit,
     )
     log.info("Fuente: %s · grabaciones en %s · auditoría en %s", recorder.masked_source, RECORDINGS_DIR, AUDIT_DIR)
-    return Controller(cfg, recorder, audit, supervisor_sync_check())
+    analisis = ProcesoAnalisis() if analisis_habilitado(cfg) else None
+    if analisis is not None:
+        log.info("Modo de análisis de archivos ACTIVO (proceso aparte, nice 10).")
+    return Controller(cfg, recorder, audit, supervisor_sync_check(), analisis=analisis)
 
 
 def main() -> None:
@@ -230,6 +267,8 @@ def main() -> None:
                 stop.wait(5)
             stop.wait(1)
     finally:
+        if ctl.analisis is not None:
+            ctl.analisis.detener()
         ctl.recorder.shutdown()
         ctl.audit.close()
 
