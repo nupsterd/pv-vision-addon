@@ -5,6 +5,36 @@ versionado siguiendo [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.2.0-alpha] - 2026-10-09
+
+Modo de análisis de archivos (B7.1, PR B): detector de personas en sombra sobre clips ya
+grabados. Apagado por defecto; no envía nada fuera de la Pi.
+
+### Added
+- Proceso aparte `python3 -m pv_vision.analisis` (nice 10, relanzado si muere; nunca frena
+  al grabador): ffmpeg (crop ROI, 1 de N, scale+pad) → ONNX Runtime → ByteTrack mínimo propio →
+  conteo de línea con histéresis y confirmación. Solo clase persona.
+- Modelos en la imagen con sha256 verificado en el build: YOLOX Nano/Tiny/S (release
+  0.1.1rc0 de Megvii) y RF-DETR Nano/Nano int8/Small (exportados, release `modelos-v1`).
+  `NOTICE` con licencias y atribución.
+- Opciones `analisis_*`, `roi`, `linea`, `sentido_salida`, `punto_referencia`,
+  `histeresis_px`, `cuadros_confirmacion`, umbrales del seguimiento, `referencia_desde` y
+  `depuracion_clips`, con validación estricta (un error desactiva el análisis, no el grabador).
+- `cruces.jsonl` (cruces con hora absoluta y métricas por clip: fps, CPU, RSS, temperatura,
+  frecuencia), `resumen.json` e idempotencia por clip/modelo/parámetros.
+- Cuadro de referencia PNG (grilla, ROI, líneas, flecha de salida) y video de depuración
+  H.264 bajo demanda; retención de 7 días para `depuracion/` y `referencia/`.
+- `tools/evaluar.py` (stdlib): niveles 1 y 2 contra las etiquetas del conjunto B. Solape entre
+  clips hasta `inicio + dur_video_s` (salidas y entradas), `--ventana clips|planilla`,
+  `det = max(0, salidas − entradas)` y columna opcional `no_medibles` (B7.2).
+- Dependencias del venv fijadas en `requirements.txt` (numpy 2.5.3, onnxruntime 1.30.0).
+
+### Fixed
+- Grabador: al cerrar cada sesión de ffmpeg se descartan los segmentos propios sin video
+  (MP4 inválido, p. ej. de 28 bytes, o de menos de 1 s) — quedaban cuando la parada caía justo
+  en un corte, típico al final de una ventana alineada a 5 min. Se auditan como
+  `segment_discarded` y se cuentan en el resumen (`descartados=`).
+
 ## [0.1.1-alpha] - 2026-10-09
 
 Cambio de imagen base (B7.1, PR A). Sin cambios de comportamiento del grabador.

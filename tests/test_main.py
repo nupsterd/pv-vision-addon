@@ -158,3 +158,47 @@ def test_resumen_cada_15_min(ctl_env, caplog):
     assert "próxima_ventana=2026-10-05T11:50-05:00" in caplog.text
     assert rec.counters.segments == 0  # contadores del período
     assert CAMERA_PASSWORD not in caplog.text
+
+
+# ----------------------------------------------------------------------------- análisis
+
+
+def test_analisis_habilitado_solo_si_activo_y_valido():
+    from pv_vision.main import analisis_habilitado
+
+    assert not analisis_habilitado(make_config())
+    assert analisis_habilitado(make_config(analisis_activo=True))
+    assert not analisis_habilitado(make_config(analisis_activo=True, analisis_hilos=9))
+
+
+def test_tick_del_analisis_y_sus_errores_no_frenan_al_grabador(ctl_env, caplog):
+    ctl, clock, rec, *_ = ctl_env
+
+    class Analisis:
+        ticks = 0
+
+        def tick(self):
+            Analisis.ticks += 1
+            raise RuntimeError("falla del análisis")
+
+    ctl.analisis = Analisis()
+    clock.now = bogota(2026, 10, 5, 6, 30)
+    ctl.step()
+    clock.advance(1)
+    ctl.step()
+    assert Analisis.ticks == 2 and rec.calls[-1][0] is True
+    assert "Error al supervisar el proceso de análisis" in caplog.text
+
+
+def test_retencion_incluye_derivados(ctl_env):
+    import os
+
+    ctl, _clock, _rec, audit, _state, d = ctl_env
+    f = d / "depuracion" / "20260901-090000" / "x_dbg.mp4"
+    f.parent.mkdir(parents=True)
+    f.write_bytes(b"\0" * 7)
+    viejo = bogota(2026, 9, 1).timestamp()
+    os.utime(f, (viejo, viejo))
+    ctl.step()
+    assert not f.exists()
+    assert {"kind": "derived_deleted", "file": "depuracion/20260901-090000/x_dbg.mp4", "bytes": 7} in audit.records

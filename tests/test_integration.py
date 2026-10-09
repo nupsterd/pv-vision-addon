@@ -236,3 +236,24 @@ def test_clave_incorrecta_falla_sin_mostrar_la_clave(server, tmp_path, caplog):
     texto = caplog.text + json.dumps(_audit_lines(tmp_path))
     assert mala not in texto and quote(mala, safe="") not in texto
     assert "rtsp://***@127.0.0.1" in texto
+
+
+def test_parada_justo_en_un_corte_no_deja_segmentos_rotos(server, tmp_path):
+    """Hallazgo del PR A: si la parada cae en el instante de un corte, ffmpeg puede dejar un MP4 de
+    28 bytes (sin moov) o un segmento de una fracción de segundo. Se descartan (segment_discarded)."""
+    from pv_vision.media import motivo_descarte, probar
+
+    for intento in range(3):
+        sub = tmp_path / f"i{intento}"
+        rec = _recorder(sub, server)
+        rec.tick(True)
+        deadline = time.monotonic() + 20
+        while len(list_segments(sub / "media", BOGOTA)) < 3 and time.monotonic() < deadline:
+            rec.tick(True)
+            time.sleep(0.01)
+        rec.tick(False)  # justo al aparecer el 3.er segmento
+        for seg in list_segments(sub / "media", BOGOTA):
+            assert motivo_descarte(probar(seg.path)) is None, f"quedó {seg.path.name} ({seg.size} bytes)"
+        lineas = _audit_lines(sub)
+        assert all(r["kind"] in ("segment_created", "segment_discarded") for r in lineas)
+        assert any(r["kind"] == "segment_discarded" for r in lineas) or len(lineas) == 3

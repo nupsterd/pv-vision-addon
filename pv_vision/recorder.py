@@ -12,6 +12,10 @@ Reglas (Phase 0, aprobadas):
 - **Fin de ventana:** ``SIGINT`` (ffmpeg cierra el archivo y sale con 255, que es lo
   normal) y ``SIGKILL`` si no salió en ``stop_grace`` s.
 - El ffconcat con la URL se crea al arrancar y se borra siempre que el proceso termina.
+- Cada segmento cerrado de la sesión pasa por ``ffprobe``: si no tiene video válido o dura
+  menos de 1 s (p. ej. el MP4 de 28 bytes que queda si la parada cae justo en un corte), se
+  borra y se audita como ``segment_discarded``. Solo se miran los segmentos nuevos de la
+  propia sesión, nunca los de otra ni archivos ajenos.
 - Cada línea de stderr pasa por la máscara antes de llegar al log.
 """
 
@@ -40,6 +44,7 @@ from pv_vision.ffmpeg import (
     rtsp_url,
     write_ffconcat,
 )
+from pv_vision.media import InfoVideo, motivo_descarte, probar
 from pv_vision.segments import list_segments
 
 log = logging.getLogger("pv_vision.recorder")
@@ -59,10 +64,11 @@ class Counters:
     segments: int = 0
     bytes: int = 0
     reconnects: int = 0
+    discarded: int = 0
 
     def take(self) -> Counters:
-        snap = Counters(self.segments, self.bytes, self.reconnects)
-        self.segments = self.bytes = self.reconnects = 0
+        snap = Counters(self.segments, self.bytes, self.reconnects, self.discarded)
+        self.segments = self.bytes = self.reconnects = self.discarded = 0
         return snap
 
 
@@ -98,6 +104,7 @@ class Recorder:
         healthy_seconds: float = HEALTHY_SECONDS,
         stop_grace: float = STOP_GRACE_SECONDS,
         popen: Callable[..., Any] = subprocess.Popen,
+        probe: Callable[[Path], InfoVideo | None] = probar,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         self._host = host
@@ -116,6 +123,7 @@ class Recorder:
         self._healthy = healthy_seconds
         self._grace = stop_grace
         self._popen = popen
+        self._probe = probe
         self._mono = monotonic
         self.redactor = Redactor([password, user])
         self.counters = Counters()
@@ -226,7 +234,7 @@ class Recorder:
         """Audita los segmentos cerrados y devuelve False si el vigía venció."""
         segs = self._new_segments(s)
         for seg in segs[:-1]:
-            self._audit_segment(s, seg.path.name, seg.size)
+            self._audit_segment(s, seg.path, seg.size)
         now = self._mono()
         if segs:
             key = (segs[-1].path.name, segs[-1].size)
@@ -235,10 +243,23 @@ class Recorder:
                 s.last_growth = now
         return now - s.last_growth <= self._stall
 
-    def _audit_segment(self, s: _Session, name: str, size: int) -> None:
+    def _audit_segment(self, s: _Session, path: Path, size: int) -> None:
+        name = path.name
         if name in s.audited:
             return
         s.audited.add(name)
+        motivo = motivo_descarte(self._probe(path))
+        if motivo is not None:
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError as exc:
+                log.error("No se pudo borrar el segmento descartado %s: %s", name, exc)
+            self.counters.discarded += 1
+            self._audit.record("segment_discarded", file=name, bytes=size, motivo=motivo, stream=self.stream)
+            log.info("Segmento descartado: %s (%d bytes, %s).", name, size, motivo)
+            return
         self.counters.segments += 1
         self.counters.bytes += size
         self._audit.record("segment_created", file=name, bytes=size, stream=self.stream)
@@ -249,7 +270,7 @@ class Recorder:
         if s.stderr_thread is not None:
             s.stderr_thread.join(timeout=2)
         for seg in self._new_segments(s):
-            self._audit_segment(s, seg.path.name, seg.size)
+            self._audit_segment(s, seg.path, seg.size)
         remove_quietly(s.concat_path)
         self._session = None
 
