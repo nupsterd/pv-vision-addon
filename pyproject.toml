@@ -1,0 +1,18 @@
+[project]
+name = "pv-vision-addon"
+version = "0.1.0a0"
+description = "Window recorder (RTSP, no re-encoding) add-on for Home Assistant (Porteria Virtual)"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = ["integration: necesita ffmpeg y mediamtx (corre dentro de la imagen del add-on)"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "BLE"]
