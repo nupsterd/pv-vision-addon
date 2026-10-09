@@ -37,7 +37,7 @@ def test_defaults_del_yaml_iguales_a_los_de_config():
 
 
 def test_version_coincide_en_yaml_y_paquete():
-    assert _yaml()["version"] == ADDON_VERSION == "0.1.0-alpha"
+    assert _yaml()["version"] == ADDON_VERSION == "0.1.1-alpha"
 
 
 def test_yaml_slug_arch_mapas_y_api():
