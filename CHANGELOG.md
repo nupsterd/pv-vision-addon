@@ -5,7 +5,7 @@ versionado siguiendo [SemVer](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
-## [0.2.0-alpha]
+## [0.2.0-alpha] - 2026-10-09
 
 Modo de análisis de archivos (B7.1, PR B): detector de personas en sombra sobre clips ya
 grabados. Apagado por defecto; no envía nada fuera de la Pi.
@@ -35,7 +35,7 @@ grabados. Apagado por defecto; no envía nada fuera de la Pi.
   en un corte, típico al final de una ventana alineada a 5 min. Se auditan como
   `segment_discarded` y se cuentan en el resumen (`descartados=`).
 
-## [0.1.1-alpha]
+## [0.1.1-alpha] - 2026-10-09
 
 Cambio de imagen base (B7.1, PR A). Sin cambios de comportamiento del grabador.
 
