@@ -1,0 +1,52 @@
+name: "Visión (Portería Virtual)"
+version: "0.1.0-alpha"
+slug: pv_vision
+description: >
+  Graba el stream RTSP de una cámara (Dahua) en ventanas horarias de días
+  hábiles, sin recodificar, en segmentos MP4 fragmentados en /media/pv_vision/,
+  con retención máxima de 30 días. Modo sombra: no envía nada fuera de la Pi.
+
+arch:
+  - aarch64
+
+startup: services
+boot: auto
+init: false
+# GET /host/info (dt_synchronized): no se graba con el reloj de la Pi sin NTP.
+hassio_api: true
+
+options:
+  camera_host: ""
+  camera_user: ""
+  camera_password: ""
+  stream: "main"
+  ventanas:
+    - "06:20-06:50"
+    - "11:50-12:20"
+    - "18:00-18:50"
+  dias: [1, 2, 3, 4, 5]
+  segment_seconds: 300
+  retencion_dias: 30
+  min_free_gb: 10
+  tz: "America/Bogota"
+  log_level: "info"
+
+schema:
+  camera_host: str
+  camera_user: str
+  camera_password: password
+  stream: list(main|sub)
+  ventanas:
+    - "match(^[0-9]{2}:[0-9]{2}-[0-9]{2}:[0-9]{2}$)"
+  dias:
+    - int(1,7)
+  segment_seconds: int(30,3600)
+  # Tope duro de 30 días (Ley 1581, §5.9.719): también lo valida el add-on al arrancar.
+  retencion_dias: int(1,30)
+  min_free_gb: int(1,1000)
+  tz: str
+  log_level: list(debug|info|warning)
+
+map:
+  - addon_config:rw    # /config -> /app_configs/<slug>/ (auditoría visible desde core_ssh)
+  - media:rw           # /media -> carpeta Media de HA; se graba solo en /media/pv_vision/
