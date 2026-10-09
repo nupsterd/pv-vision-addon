@@ -98,7 +98,7 @@ integración contra un servidor RTSP real (mediamtx v1.9.3, binario no versionad
 
 ```bash
 docker build --build-arg BUILD_FROM=ghcr.io/home-assistant/amd64-base-debian:trixie -t pv-vision:test-base .
-printf 'FROM pv-vision:test-base\nRUN apk add --no-cache py3-pytest py3-yaml\nCOPY tests/ /app/tests/\nCOPY config.yaml pyproject.toml /app/\n' \
+printf 'FROM pv-vision:test-base\nRUN /opt/venv/bin/pip install --no-cache-dir pytest==8.4.2 pyyaml==6.0.3\nCOPY tests/ /app/tests/\nCOPY config.yaml pyproject.toml /app/\n' \
   | docker build -t pv-vision:test -f - .
 docker run --rm --entrypoint sh -v "$MTX_DIR":/mtx:ro -e PV_VISION_MEDIAMTX=/mtx/mediamtx -w /app pv-vision:test \
   -c '/opt/venv/bin/python3 -m pytest -q -p no:cacheprovider'
