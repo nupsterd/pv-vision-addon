@@ -9,7 +9,7 @@ Add-on de Home Assistant OS para la Pi de un sitio (Bloque 7). Dos partes:
 2. **Modo de análisis de archivos** (apagado por defecto): sobre clips ya grabados, detecta
    personas (YOLOX o RF-DETR en ONNX Runtime, CPU), las sigue (ByteTrack mínimo) y cuenta
    los cruces de una línea propia. Escribe cruces y métricas en JSON Lines; `tools/evaluar.py`
-   los compara con la verdad etiquetada.
+   los compara con la verdad etiquetada (personas por grupo; detalle en [DOCS.md](DOCS.md)).
 
 **Modo sombra:** no habla con `pv-backend`, no genera alertas y **el video no sale
 de la Pi** (ver [DOCS.md](DOCS.md), Ley 1581). Del análisis solo salen los `cruces.jsonl`

@@ -125,12 +125,28 @@ python3 tools/evaluar.py ~/porteria-virtual/reportes/b7/analisis/*/cruces.jsonl 
     --etiquetas ~/porteria-virtual/reportes/b7/b7_1_verdad_B_etiquetas.csv --salida ~/porteria-virtual/reportes/b7/eval
 ```
 
-`evaluar.py` (solo stdlib) junta los clips de cada grupo `nNN`, resuelve el solape de 2-4 s
-entre clips seguidos (cuenta los cruces del clip que más tenga en ese tramo), y calcula
-nivel 1 (salidas dentro de `desde`-`hasta` contra `personas_reales`: TP, FN, FP,
-sensibilidad, con la Dahua como referencia sobre los mismos grupos), nivel 2 (alertaría /
-debía alertar por grupo de `checkOut`) y desgloses por `juntas_separadas`, `luz` y casos
-difíciles. Escribe `evaluacion.md` y `evaluacion.csv`.
+`evaluar.py` (solo stdlib) junta los clips de cada grupo `nNN` y calcula:
+
+- **Solape:** el tramo de cada clip es `[inicio, inicio + dur_video_s]` (el nombre trunca al
+  segundo y el video dura más; sin `dur_video_s`, el fin del nombre). En los 2-4 s en que dos
+  clips seguidos se solapan cuenta los cruces, salidas y entradas, de un solo clip: el que más
+  tenga en ese tramo contando los dos sentidos (empate: el primero).
+- **Ventana** (`--ventana`): `clips` (por defecto) evalúa todo el tramo de los clips del grupo
+  e ignora `desde`/`hasta`; `planilla` solo cuenta los cruces dentro de `[desde, hasta]`, para
+  comparar. El modo usado queda en el encabezado de `evaluacion.md`.
+- **Unidad:** `det = max(0, salidas − entradas)` por grupo (quien sale, vuelve a marcar y sale
+  otra vez es una persona).
+- **No medibles:** columna opcional `no_medibles` en el CSV de etiquetas (entero; vacía o
+  ausente = 0) para quien cruza en el borde del clip. La verdad es
+  `real_medible = max(0, personas_reales − no_medibles)`, para el detector y para la Dahua; el
+  total de no medibles por configuración siempre aparece en `evaluacion.md`.
+- **Nivel 1:** `det` contra `real_medible`: TP, FN, FP y sensibilidad, con la Dahua
+  (`cruces_dahua`) como referencia sobre los mismos grupos. **Nivel 2:** alertaría
+  (`det > marcaron_checkout`) contra debía alertar (`real_medible > marcaron_checkout`) por
+  grupo de `checkOut`. Desgloses por `juntas_separadas`, `luz` y casos difíciles.
+
+Escribe `evaluacion.md` y `evaluacion.csv` (por grupo: `real`, `det`, TP/FN/FP, `salidas`,
+`entradas`, `no_medibles`, `real_medible`, alerta y debía alertar).
 
 ## Auditoría
 

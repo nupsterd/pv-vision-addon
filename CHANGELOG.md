@@ -24,7 +24,9 @@ grabados. Apagado por defecto; no envía nada fuera de la Pi.
   frecuencia), `resumen.json` e idempotencia por clip/modelo/parámetros.
 - Cuadro de referencia PNG (grilla, ROI, líneas, flecha de salida) y video de depuración
   H.264 bajo demanda; retención de 7 días para `depuracion/` y `referencia/`.
-- `tools/evaluar.py` (stdlib): niveles 1 y 2 contra las etiquetas del conjunto B.
+- `tools/evaluar.py` (stdlib): niveles 1 y 2 contra las etiquetas del conjunto B. Solape entre
+  clips hasta `inicio + dur_video_s` (salidas y entradas), `--ventana clips|planilla`,
+  `det = max(0, salidas − entradas)` y columna opcional `no_medibles` (B7.2).
 - Dependencias del venv fijadas en `requirements.txt` (numpy 2.5.3, onnxruntime 1.30.0).
 
 ### Fixed
