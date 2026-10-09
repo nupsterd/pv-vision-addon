@@ -29,11 +29,11 @@ jobs:
           version: "0.5.11"
           enable-cache: false
 
-      # La imagen del add-on (base HA Alpine 3.21) trae Python 3.12.
-      - name: Set up Python 3.12 + dependencias de desarrollo
+      # La imagen del add-on (base HA Debian trixie) trae Python 3.13.
+      - name: Set up Python 3.13 + dependencias de desarrollo
         run: |
-          uv python install 3.12
-          uv venv -p 3.12 .venv
+          uv python install 3.13
+          uv venv -p 3.13 .venv
           uv pip install -p .venv -r requirements-dev.txt
 
       - name: Ruff lint
